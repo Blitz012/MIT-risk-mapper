@@ -1,0 +1,44 @@
+{
+  "Discrimination & Toxicity": [
+    {
+      "subdomain": "Unfair discrimination and misrepresentation",
+      "definition": "Unequal treatment of individuals or groups by AI, often based on race, gender, or other sensitive characteristics, resulting in unfair outcomes and representation of those groups."
+    }
+  ],
+  "Privacy & Security": [
+    {
+      "subdomain": "Compromise of privacy by obtaining, leaking or correctly inferring sensitive information",
+      "definition": "AI systems that memorize and leak sensitive personal data or infer private information about individuals without their consent. Unexpected or unauthorized sharing of data and information can compromise user expectation of privacy, assist identity theft, or loss of confidential intellectual property."
+    }
+  ],
+  "Misinformation": [
+    {
+      "subdomain": "False or misleading information",
+      "definition": "AI systems that inadvertently generate or spread incorrect or deceptive information, which can lead to inaccurate beliefs in users and undermine their autonomy. Humans that make decisions based on false beliefs can experience physical, emotional or material harms"
+    }
+  ],
+  "Malicious actors": [
+    {
+      "subdomain": "Disinformation, surveillance, and influence at scale",
+      "definition": "Using AI systems to conduct large-scale disinformation campaigns, malicious surveillance, or targeted and sophisticated automated censorship and propaganda, with the aim to manipulate political processes, public opinion and behavior."
+    }
+  ],
+  "Human- Computer Interaction": [
+    {
+      "subdomain": "Overreliance and unsafe use",
+      "definition": "Users anthropomorphizing, trusting, or relying on AI systems, leading to emotional or material dependence and inappropriate relationships with or expectations of AI systems. Trust can be exploited by malicious actors (e.g., to harvest personal information or enable manipulation), or result in harm from inappropriate use of AI in critical situations (e.g., medical emergency). Overreliance on AI systems can compromise autonomy and weaken social ties."
+    }
+  ],
+  "Socioeconomic & Environmental": [
+    {
+      "subdomain": "Power centralization and unfair distribution of benefits",
+      "definition": "AI-driven concentration of power and resources within certain entities or groups, especially those with access to or ownership of powerful AI systems, leading to inequitable distribution of benefits and increased societal inequality."
+    }
+  ],
+  "AI system safety, failures, & limitations": [
+    {
+      "subdomain": "AI pursuing its own goals in conflict with human goals or values",
+      "definition": "AI systems acting in conflict with human goals or values, especially the goals of designers or users, or ethical standards. These misaligned behaviors may be introduced by humans during design and development, such as through reward hacking and goal misgeneralisation, or may result from AI using dangerous capabilities such as manipulation, deception, situational awareness to seek power, self-proliferate, or achieve other goals."
+    }
+  ]
+}

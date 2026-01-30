@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import streamlit as st
+
+from nlp_mapper import find_top_risks
+
+
+def main() -> None:
+    st.set_page_config(page_title="MIT AI Risk Mapping Tool", layout="wide")
+
+    st.title("MIT AI Risk Mapping Tool")
+    st.write(
+        "Paste an AI project description below and click **Analyze Risks** to see the "
+        "closest matching risk domains and subdomains from the MIT taxonomy."
+    )
+
+    default_text = (
+        "A health app that uses AI to predict patient outcomes based on historical records."
+    )
+    user_input = st.text_area(
+        "AI project description",
+        value=default_text,
+        height=200,
+        help="Describe your AI project in as much detail as possible.",
+    )
+
+    analyze = st.button("Analyze Risks")
+
+    if analyze:
+        if not user_input.strip():
+            st.warning("Please enter an AI project description before analyzing.")
+            return
+
+        with st.spinner("Analyzing risks..."):
+            # Call the NLP mapper
+            results = find_top_risks(user_input, n=3)
+
+        st.subheader("Top Matching Risks")
+
+        # Normalize scores to [0,1] for visualization if they are cosine similarities in [-1,1]
+        raw_scores = [r["score"] for r in results]
+        if raw_scores:
+            min_score = min(raw_scores)
+            max_score = max(raw_scores)
+        else:
+            min_score = max_score = 0.0
+
+        def normalize(score: float) -> float:
+            if max_score == min_score:
+                return 1.0
+            return (score - min_score) / (max_score - min_score)
+
+        for i, r in enumerate(results, start=1):
+            domain = r["domain"]
+            subdomain = r["subdomain"]
+            score = r["score"]
+            norm_score = normalize(score)
+
+            with st.container():
+                cols = st.columns([3, 3, 2, 2])
+                with cols[0]:
+                    st.markdown(f"**Match {i}**")
+                with cols[1]:
+                    st.markdown(f"**Domain:** {domain}")
+                    st.markdown(f"**Subdomain:** {subdomain}")
+                with cols[2]:
+                    st.metric(label="Similarity (cosine)", value=f"{score:.3f}")
+                with cols[3]:
+                    st.progress(norm_score)
+
+
+if __name__ == "__main__":
+    main()
+
