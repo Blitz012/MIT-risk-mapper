@@ -1,10 +1,29 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import streamlit as st
 
-from nlp_mapper import find_top_risks
+from llm_evaluator import RationaleError, generate_rationale
+from nlp_mapper import RiskMapper
+
+
+@st.cache_resource(show_spinner="Loading model and taxonomy...")
+def get_mapper() -> RiskMapper:
+    """Load the embedding model and taxonomy once, then reuse across reruns."""
+    return RiskMapper()
+
+
+def get_top_risks(user_input: str, n: int = 3) -> list[dict]:
+    """Run the cached mapper and return result dicts including the definition."""
+    mapper = get_mapper()
+    return [
+        {
+            "domain": entry.domain,
+            "subdomain": entry.subdomain,
+            "definition": entry.definition,
+            "score": score,
+        }
+        for entry, score in mapper.find_top_risks(user_input, n=n)
+    ]
 
 
 def main() -> None:
@@ -34,8 +53,7 @@ def main() -> None:
             return
 
         with st.spinner("Analyzing risks..."):
-            # Call the NLP mapper
-            results = find_top_risks(user_input, n=3)
+            results = get_top_risks(user_input, n=3)
 
         st.subheader("Top Matching Risks")
 
@@ -69,6 +87,25 @@ def main() -> None:
                     st.metric(label="Similarity (cosine)", value=f"{score:.3f}")
                 with cols[3]:
                     st.progress(norm_score)
+
+        st.subheader("Why these risks apply")
+        with st.spinner("Generating rationale..."):
+            try:
+                rationale = generate_rationale(user_input, results)
+            except RationaleError as err:
+                rationale = None
+                st.info(
+                    f"Rationale unavailable, showing vector matches only. {err}"
+                )
+
+        if rationale:
+            if rationale.get("summary"):
+                st.markdown(f"**Summary:** {rationale['summary']}")
+            for item in rationale.get("rationales", []):
+                subdomain = item.get("subdomain", "")
+                text = item.get("rationale", "")
+                with st.expander(subdomain or "Risk rationale", expanded=True):
+                    st.write(text)
 
 
 if __name__ == "__main__":
