@@ -93,7 +93,7 @@ def find_top_risks(user_input: str, n: int = 3):
 
     Returns a list of dictionaries:
     [
-      {"domain": ..., "subdomain": ..., "score": ...},
+      {"domain": ..., "subdomain": ..., "definition": ..., "score": ...},
       ...
     ]
     """
@@ -103,6 +103,7 @@ def find_top_risks(user_input: str, n: int = 3):
         {
             "domain": entry.domain,
             "subdomain": entry.subdomain,
+            "definition": entry.definition,
             "score": score,
         }
         for entry, score in results

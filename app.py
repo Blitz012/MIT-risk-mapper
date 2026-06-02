@@ -4,13 +4,29 @@ import pandas as pd
 import streamlit as st
 
 from bulk_processor import process_descriptions, to_csv_bytes
-from nlp_mapper import RiskMapper, find_top_risks
+from llm_evaluator import RationaleError, generate_rationale
+from nlp_mapper import RiskMapper
+from visualizations import build_radar
 
 
 @st.cache_resource(show_spinner="Loading model and taxonomy...")
 def get_mapper() -> RiskMapper:
     """Load the embedding model and taxonomy once, then reuse across reruns."""
     return RiskMapper()
+
+
+def get_top_risks(user_input: str, n: int = 3) -> list[dict]:
+    """Run the cached mapper and return result dicts including the definition."""
+    mapper = get_mapper()
+    return [
+        {
+            "domain": entry.domain,
+            "subdomain": entry.subdomain,
+            "definition": entry.definition,
+            "score": score,
+        }
+        for entry, score in mapper.find_top_risks(user_input, n=n)
+    ]
 
 
 def main() -> None:
@@ -40,8 +56,10 @@ def main() -> None:
             return
 
         with st.spinner("Analyzing risks..."):
-            # Call the NLP mapper
-            results = find_top_risks(user_input, n=3)
+            # Fetch a few extra matches so the radar has enough axes to read as
+            # an area, then show the top three in detail below.
+            radar_results = get_top_risks(user_input, n=6)
+            results = radar_results[:3]
 
         st.subheader("Top Matching Risks")
 
@@ -75,6 +93,32 @@ def main() -> None:
                     st.metric(label="Similarity (cosine)", value=f"{score:.3f}")
                 with cols[3]:
                     st.progress(norm_score)
+
+        st.subheader("Risk Similarity Radar")
+        radar_fig = build_radar(radar_results)
+        if radar_fig is not None:
+            st.plotly_chart(radar_fig, use_container_width=True)
+        else:
+            st.caption("Not enough matches to draw a radar chart.")
+
+        st.subheader("Why these risks apply")
+        with st.spinner("Generating rationale..."):
+            try:
+                rationale = generate_rationale(user_input, results)
+            except RationaleError as err:
+                rationale = None
+                st.info(
+                    f"Rationale unavailable, showing vector matches only. {err}"
+                )
+
+        if rationale:
+            if rationale.get("summary"):
+                st.markdown(f"**Summary:** {rationale['summary']}")
+            for item in rationale.get("rationales", []):
+                subdomain = item.get("subdomain", "")
+                text = item.get("rationale", "")
+                with st.expander(subdomain or "Risk rationale", expanded=True):
+                    st.write(text)
 
     st.divider()
     st.subheader("Bulk CSV Audit")
