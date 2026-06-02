@@ -6,6 +6,11 @@ import streamlit as st
 from bulk_processor import process_descriptions, to_csv_bytes
 from llm_evaluator import RationaleError, generate_rationale
 from nlp_mapper import RiskMapper
+from report_builder import (
+    build_analysis_dataframe,
+    build_markdown_report,
+    report_to_bytes,
+)
 from visualizations import build_radar
 
 
@@ -27,6 +32,78 @@ def get_top_risks(user_input: str, n: int = 3) -> list[dict]:
         }
         for entry, score in mapper.find_top_risks(user_input, n=n)
     ]
+
+
+def _render_analysis(analysis: dict) -> None:
+    """Render a stored analysis: match cards, radar, rationale, and downloads."""
+    user_input = analysis["input"]
+    results = analysis["results"]
+    rationale = analysis["rationale"]
+    rationale_error = analysis["rationale_error"]
+
+    st.subheader("Top Matching Risks")
+
+    # Normalize scores to [0,1] for the progress bars. Cosine scores can sit in
+    # a narrow band, so this stretches them relative to the current matches.
+    raw_scores = [r["score"] for r in results]
+    min_score = min(raw_scores) if raw_scores else 0.0
+    max_score = max(raw_scores) if raw_scores else 0.0
+
+    def normalize(score: float) -> float:
+        if max_score == min_score:
+            return 1.0
+        return (score - min_score) / (max_score - min_score)
+
+    for i, r in enumerate(results, start=1):
+        with st.container():
+            cols = st.columns([3, 3, 2, 2])
+            with cols[0]:
+                st.markdown(f"**Match {i}**")
+            with cols[1]:
+                st.markdown(f"**Domain:** {r['domain']}")
+                st.markdown(f"**Subdomain:** {r['subdomain']}")
+            with cols[2]:
+                st.metric(label="Similarity (cosine)", value=f"{r['score']:.3f}")
+            with cols[3]:
+                st.progress(normalize(r["score"]))
+
+    st.subheader("Risk Similarity Radar")
+    radar_fig = build_radar(results)
+    if radar_fig is not None:
+        st.plotly_chart(radar_fig, use_container_width=True)
+    else:
+        st.caption("Not enough matches to draw a radar chart.")
+
+    st.subheader("Why these risks apply")
+    if rationale_error:
+        st.info(f"Rationale unavailable, showing vector matches only. {rationale_error}")
+    if rationale:
+        if rationale.get("summary"):
+            st.markdown(f"**Summary:** {rationale['summary']}")
+        for item in rationale.get("rationales", []):
+            sub = item.get("subdomain", "")
+            text = item.get("rationale", "")
+            with st.expander(sub or "Risk rationale", expanded=True):
+                st.write(text)
+
+    st.subheader("Download this analysis")
+    csv_bytes = to_csv_bytes(build_analysis_dataframe(results))
+    md_bytes = report_to_bytes(build_markdown_report(user_input, results, rationale))
+    dl_cols = st.columns(2)
+    with dl_cols[0]:
+        st.download_button(
+            label="Download matches CSV",
+            data=csv_bytes,
+            file_name="risk_analysis.csv",
+            mime="text/csv",
+        )
+    with dl_cols[1]:
+        st.download_button(
+            label="Download report (Markdown)",
+            data=md_bytes,
+            file_name="risk_analysis_report.md",
+            mime="text/markdown",
+        )
 
 
 def main() -> None:
@@ -73,67 +150,30 @@ def main() -> None:
         with st.spinner("Analyzing risks..."):
             # Fetch exactly the number the user asked for. Three or more keeps
             # the radar readable as an area rather than a line.
-            radar_results = get_top_risks(user_input, n=num_matches)
-            results = radar_results
+            results = get_top_risks(user_input, n=num_matches)
 
-        st.subheader("Top Matching Risks")
-
-        # Normalize scores to [0,1] for visualization if they are cosine similarities in [-1,1]
-        raw_scores = [r["score"] for r in results]
-        if raw_scores:
-            min_score = min(raw_scores)
-            max_score = max(raw_scores)
-        else:
-            min_score = max_score = 0.0
-
-        def normalize(score: float) -> float:
-            if max_score == min_score:
-                return 1.0
-            return (score - min_score) / (max_score - min_score)
-
-        for i, r in enumerate(results, start=1):
-            domain = r["domain"]
-            subdomain = r["subdomain"]
-            score = r["score"]
-            norm_score = normalize(score)
-
-            with st.container():
-                cols = st.columns([3, 3, 2, 2])
-                with cols[0]:
-                    st.markdown(f"**Match {i}**")
-                with cols[1]:
-                    st.markdown(f"**Domain:** {domain}")
-                    st.markdown(f"**Subdomain:** {subdomain}")
-                with cols[2]:
-                    st.metric(label="Similarity (cosine)", value=f"{score:.3f}")
-                with cols[3]:
-                    st.progress(norm_score)
-
-        st.subheader("Risk Similarity Radar")
-        radar_fig = build_radar(radar_results)
-        if radar_fig is not None:
-            st.plotly_chart(radar_fig, use_container_width=True)
-        else:
-            st.caption("Not enough matches to draw a radar chart.")
-
-        st.subheader("Why these risks apply")
+        # Generate the rationale once, here, rather than on every rerun. The
+        # whole analysis is cached in session_state so that download clicks
+        # (which rerun the script) neither call the model again nor wipe the
+        # results off the page.
+        rationale = None
+        rationale_error = None
         with st.spinner("Generating rationale..."):
             try:
                 rationale = generate_rationale(user_input, results)
             except RationaleError as err:
-                rationale = None
-                st.info(
-                    f"Rationale unavailable, showing vector matches only. {err}"
-                )
+                rationale_error = str(err)
 
-        if rationale:
-            if rationale.get("summary"):
-                st.markdown(f"**Summary:** {rationale['summary']}")
-            for item in rationale.get("rationales", []):
-                subdomain = item.get("subdomain", "")
-                text = item.get("rationale", "")
-                with st.expander(subdomain or "Risk rationale", expanded=True):
-                    st.write(text)
+        st.session_state["analysis"] = {
+            "input": user_input,
+            "results": results,
+            "rationale": rationale,
+            "rationale_error": rationale_error,
+        }
+
+    analysis = st.session_state.get("analysis")
+    if analysis:
+        _render_analysis(analysis)
 
     st.divider()
     st.subheader("Bulk CSV Audit")
