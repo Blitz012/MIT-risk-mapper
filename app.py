@@ -48,18 +48,33 @@ def main() -> None:
         help="Describe your AI project in as much detail as possible.",
     )
 
+    num_matches = st.slider(
+        "Number of top matches to show",
+        min_value=3,
+        max_value=8,
+        value=3,
+        help="How many of the closest risk subdomains to display and chart.",
+    )
+
     analyze = st.button("Analyze Risks")
 
     if analyze:
-        if not user_input.strip():
+        stripped = user_input.strip()
+        if not stripped:
             st.warning("Please enter an AI project description before analyzing.")
+            return
+        if len(stripped.split()) < 4:
+            st.warning(
+                "Please enter a more complete description (at least a short "
+                "sentence) so the match is meaningful."
+            )
             return
 
         with st.spinner("Analyzing risks..."):
-            # Fetch a few extra matches so the radar has enough axes to read as
-            # an area, then show the top three in detail below.
-            radar_results = get_top_risks(user_input, n=6)
-            results = radar_results[:3]
+            # Fetch exactly the number the user asked for. Three or more keeps
+            # the radar readable as an area rather than a line.
+            radar_results = get_top_risks(user_input, n=num_matches)
+            results = radar_results
 
         st.subheader("Top Matching Risks")
 
@@ -139,19 +154,40 @@ def main() -> None:
             st.warning("The uploaded CSV has no rows.")
             return
 
+        st.caption(f"Loaded {len(bulk_df)} rows and {len(bulk_df.columns)} columns.")
+
         text_column = st.selectbox(
             "Which column holds the project descriptions?",
             options=list(bulk_df.columns),
+        )
+        bulk_top_n = st.slider(
+            "Matches per description",
+            min_value=1,
+            max_value=5,
+            value=3,
+            help="How many top risk matches to record for each row.",
         )
 
         if st.button("Run Bulk Audit"):
             with st.spinner(f"Auditing {len(bulk_df)} descriptions..."):
                 mapper = get_mapper()
                 report = process_descriptions(
-                    bulk_df, mapper, text_column=text_column, top_n=3
+                    bulk_df, mapper, text_column=text_column, top_n=bulk_top_n
                 )
 
-            st.success(f"Processed {len(report)} rows.")
+            # A scored row has no note; skipped (empty) rows carry a note value.
+            if "note" in report.columns:
+                scored = int(report["note"].isna().sum())
+            else:
+                scored = len(report)
+            skipped = len(report) - scored
+            if skipped:
+                st.success(
+                    f"Processed {len(report)} rows: {scored} scored, "
+                    f"{skipped} skipped as empty."
+                )
+            else:
+                st.success(f"Processed {len(report)} rows.")
             st.dataframe(report, use_container_width=True)
             st.download_button(
                 label="Download report CSV",
