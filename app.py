@@ -4,6 +4,7 @@ import streamlit as st
 
 from llm_evaluator import RationaleError, generate_rationale
 from nlp_mapper import RiskMapper
+from visualizations import build_radar
 
 
 @st.cache_resource(show_spinner="Loading model and taxonomy...")
@@ -53,7 +54,10 @@ def main() -> None:
             return
 
         with st.spinner("Analyzing risks..."):
-            results = get_top_risks(user_input, n=3)
+            # Fetch a few extra matches so the radar has enough axes to read as
+            # an area, then show the top three in detail below.
+            radar_results = get_top_risks(user_input, n=6)
+            results = radar_results[:3]
 
         st.subheader("Top Matching Risks")
 
@@ -87,6 +91,13 @@ def main() -> None:
                     st.metric(label="Similarity (cosine)", value=f"{score:.3f}")
                 with cols[3]:
                     st.progress(norm_score)
+
+        st.subheader("Risk Similarity Radar")
+        radar_fig = build_radar(radar_results)
+        if radar_fig is not None:
+            st.plotly_chart(radar_fig, use_container_width=True)
+        else:
+            st.caption("Not enough matches to draw a radar chart.")
 
         st.subheader("Why these risks apply")
         with st.spinner("Generating rationale..."):
