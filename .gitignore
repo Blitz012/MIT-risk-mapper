@@ -19,6 +19,10 @@ env/
 # Streamlit local secrets
 .streamlit/secrets.toml
 
-# IDE
+# IDE and agent config
 .vscode/
 .idea/
+.claude/
+
+# Local dev launcher (machine-specific convenience, not for the repo)
+run_app.py
