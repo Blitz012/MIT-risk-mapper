@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from pathlib import Path
-
+import pandas as pd
 import streamlit as st
 
-from nlp_mapper import find_top_risks
+from bulk_processor import process_descriptions, to_csv_bytes
+from nlp_mapper import RiskMapper, find_top_risks
+
+
+@st.cache_resource(show_spinner="Loading model and taxonomy...")
+def get_mapper() -> RiskMapper:
+    """Load the embedding model and taxonomy once, then reuse across reruns."""
+    return RiskMapper()
 
 
 def main() -> None:
@@ -69,6 +75,46 @@ def main() -> None:
                     st.metric(label="Similarity (cosine)", value=f"{score:.3f}")
                 with cols[3]:
                     st.progress(norm_score)
+
+    st.divider()
+    st.subheader("Bulk CSV Audit")
+    st.write(
+        "Upload a CSV of project descriptions to audit them in bulk and download "
+        "a report of the top risk matches and scores for each one."
+    )
+
+    uploaded = st.file_uploader("CSV file", type=["csv"])
+    if uploaded is not None:
+        try:
+            bulk_df = pd.read_csv(uploaded)
+        except Exception as exc:
+            st.error(f"Could not read the CSV file: {exc}")
+            return
+
+        if bulk_df.empty:
+            st.warning("The uploaded CSV has no rows.")
+            return
+
+        text_column = st.selectbox(
+            "Which column holds the project descriptions?",
+            options=list(bulk_df.columns),
+        )
+
+        if st.button("Run Bulk Audit"):
+            with st.spinner(f"Auditing {len(bulk_df)} descriptions..."):
+                mapper = get_mapper()
+                report = process_descriptions(
+                    bulk_df, mapper, text_column=text_column, top_n=3
+                )
+
+            st.success(f"Processed {len(report)} rows.")
+            st.dataframe(report, use_container_width=True)
+            st.download_button(
+                label="Download report CSV",
+                data=to_csv_bytes(report),
+                file_name="risk_audit_report.csv",
+                mime="text/csv",
+            )
 
 
 if __name__ == "__main__":
