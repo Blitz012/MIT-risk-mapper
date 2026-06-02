@@ -34,7 +34,11 @@ The app combines a vector matching core with three layers on top of it:
 | `llm_evaluator.py` | Rationale engine that calls a local Ollama model |
 | `visualizations.py` | Builds the Plotly radar chart |
 | `bulk_processor.py` | Runs many descriptions through one shared mapper and flattens the report |
+| `report_builder.py` | Builds the downloadable CSV and Markdown report for a single analysis |
+| `api.py` | FastAPI REST service exposing the mapper over HTTP for programmatic use |
+| `evaluate_mapper.py` | Scores the mapper against a gold standard and reports scikit-learn metrics |
 | `data/mit_taxonomy.json` | The flattened MIT AI Risk taxonomy used for matching |
+| `data/gold_standard.csv` | Curated, class balanced set of real world AI incidents for evaluation |
 | `convert_taxonomy.py` | Helper that builds the JSON taxonomy from the source spreadsheet |
 
 ## Setup
@@ -95,3 +99,39 @@ every risk definition once at startup. For a query it embeds the input text and
 ranks all definitions by cosine similarity, returning the highest scoring
 matches. Because the definition embeddings are cached on the loaded model, only
 the query has to be embedded per request.
+
+## REST API
+
+For programmatic and citable use, `api.py` exposes the mapper over HTTP with
+FastAPI. The embedding model is loaded once at startup and reused across
+requests.
+
+```bash
+uvicorn api:app --reload
+```
+
+Then open http://localhost:8000/docs for interactive, self documenting
+endpoints. The main endpoint accepts a JSON description and returns the top
+matches with their cosine scores:
+
+```bash
+curl -X POST http://localhost:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"description": "A health app that predicts patient outcomes.", "top_n": 3}'
+```
+
+A `GET /health` endpoint reports whether the model is loaded, which is useful for
+uptime checks.
+
+## Evaluating accuracy
+
+`evaluate_mapper.py` measures how well the vector mapper recovers the correct MIT
+risk domain for a curated, class balanced gold standard of real world AI
+incidents (`data/gold_standard.csv`). It treats the task as single label
+classification and reports scikit-learn precision, recall, and F1 (macro and
+weighted) plus top 1 and top k accuracy, so the results are citable and
+reproducible.
+
+```bash
+python evaluate_mapper.py
+```
