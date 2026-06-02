@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
+from bulk_processor import process_descriptions, to_csv_bytes
 from llm_evaluator import RationaleError, generate_rationale
 from nlp_mapper import RiskMapper
 from visualizations import build_radar
@@ -117,6 +119,46 @@ def main() -> None:
                 text = item.get("rationale", "")
                 with st.expander(subdomain or "Risk rationale", expanded=True):
                     st.write(text)
+
+    st.divider()
+    st.subheader("Bulk CSV Audit")
+    st.write(
+        "Upload a CSV of project descriptions to audit them in bulk and download "
+        "a report of the top risk matches and scores for each one."
+    )
+
+    uploaded = st.file_uploader("CSV file", type=["csv"])
+    if uploaded is not None:
+        try:
+            bulk_df = pd.read_csv(uploaded)
+        except Exception as exc:
+            st.error(f"Could not read the CSV file: {exc}")
+            return
+
+        if bulk_df.empty:
+            st.warning("The uploaded CSV has no rows.")
+            return
+
+        text_column = st.selectbox(
+            "Which column holds the project descriptions?",
+            options=list(bulk_df.columns),
+        )
+
+        if st.button("Run Bulk Audit"):
+            with st.spinner(f"Auditing {len(bulk_df)} descriptions..."):
+                mapper = get_mapper()
+                report = process_descriptions(
+                    bulk_df, mapper, text_column=text_column, top_n=3
+                )
+
+            st.success(f"Processed {len(report)} rows.")
+            st.dataframe(report, use_container_width=True)
+            st.download_button(
+                label="Download report CSV",
+                data=to_csv_bytes(report),
+                file_name="risk_audit_report.csv",
+                mime="text/csv",
+            )
 
 
 if __name__ == "__main__":
